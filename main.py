@@ -38,9 +38,9 @@ def generate_content(product_name):
         "'image_prompt' (وصف تفصيلي بالإنجليزية لصورة 3D لورشة عمل إلكترونيات أو دائرة مضيئة تناسب هذا المشروع لتوليدها بالذكاء الاصطناعي)."
     )
     
-    # استخدام الموديل الأحدث لتوليد المحتوى
+    # استخدام الموديل الأحدث لتوليد المحتوى بناءً على رسالة الخطأ
     response = client.models.generate_content(
-        model='gemini-2.5-flash',
+        model='gemini-3.8-flash',
         contents=prompt
     )
     

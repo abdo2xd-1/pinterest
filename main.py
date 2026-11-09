@@ -10,7 +10,7 @@ BUFFER_PROFILE_ID = os.environ.get("BUFFER_PROFILE_ID")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 HUGGINGFACE_API_KEY = os.environ.get("HUGGINGFACE_API_KEY")
 
-# إعداد واجهة Gemini الجديدة مع تحديد إصدار v1beta لتجنب خطأ 404
+# إعداد واجهة Gemini الجديدة مع تحديد إصدار v1beta
 client = genai.Client(api_key=GEMINI_API_KEY, http_options={'api_version': 'v1beta'})
 
 def get_electronic_product():
@@ -38,9 +38,9 @@ def generate_content(product_name):
         "'image_prompt' (وصف تفصيلي بالإنجليزية لصورة 3D لورشة عمل إلكترونيات أو دائرة مضيئة تناسب هذا المشروع لتوليدها بالذكاء الاصطناعي)."
     )
     
-    # استخدام الطريقة الجديدة لتوليد المحتوى
+    # استخدام الموديل الأحدث لتوليد المحتوى
     response = client.models.generate_content(
-        model='gemini-1.5-flash',
+        model='gemini-2.5-flash',
         contents=prompt
     )
     

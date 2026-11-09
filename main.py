@@ -4,14 +4,14 @@ import json
 import random
 from google import genai
 
-# 1. استدعاء المفاتيح
+# 1. استدعاء المفاتيح من إعدادات الأمان في جيت هاب
 BUFFER_ACCESS_TOKEN = os.environ.get("BUFFER_ACCESS_TOKEN")
 BUFFER_PROFILE_ID = os.environ.get("BUFFER_PROFILE_ID")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 HUGGINGFACE_API_KEY = os.environ.get("HUGGINGFACE_API_KEY")
 
-# إعداد واجهة Gemini الجديدة
-client = genai.Client(api_key=GEMINI_API_KEY)
+# إعداد واجهة Gemini الجديدة مع تحديد إصدار v1beta لتجنب خطأ 404
+client = genai.Client(api_key=GEMINI_API_KEY, http_options={'api_version': 'v1beta'})
 
 def get_electronic_product():
     print("1. جاري اختيار مكون إلكتروني...")
@@ -44,6 +44,7 @@ def generate_content(product_name):
         contents=prompt
     )
     
+    # تنظيف النص لضمان استخراج صيغة JSON صحيحة
     cleaned_text = response.text.replace('```json', '').replace('```', '').strip()
     content = json.loads(cleaned_text)
     return content['title'], content['description'], content['image_prompt']

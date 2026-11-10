@@ -102,8 +102,38 @@ def generate_image(image_prompt):
     except Exception:
         exit(1)
 
+def get_pinterest_board_id(profile_id, token):
+    print("جاري البحث عن لوحة (Board) بنترست في حسابك...")
+    try:
+        url = f"https://api.bufferapp.com/1/profiles/{profile_id}.json"
+        headers = {"Authorization": f"Bearer {token}"}
+        resp = requests.get(url, headers=headers, timeout=30)
+        if resp.status_code == 200:
+            data = resp.json()
+            subprofiles = data.get("subprofiles", [])
+            if subprofiles:
+                board_id = subprofiles[0].get("id")
+                board_name = subprofiles[0].get("name")
+                print(f"✅ تم العثور على لوحة بنترست: '{board_name}' (ID: {board_id})")
+                return board_id
+            else:
+                print("❌ لم يتم العثور على أي لوحة. يرجى التأكد من إنشاء لوحة (Board) في حساب بنترست الخاص بك وعمل مزامنة في Buffer.")
+                return None
+        else:
+            print(f"❌ فشل جلب بيانات الحساب: {resp.text}")
+            return None
+    except Exception as e:
+        print(f"❌ خطأ أثناء البحث عن اللوحة: {str(e)}")
+        return None
+
 def post_to_buffer(title, description, image_path, affiliate_url):
     print("4. جاري النشر إلى بنترست عبر واجهة Buffer GraphQL...")
+    
+    # استخراج اللوحة أوتوماتيكياً
+    board_id = get_pinterest_board_id(BUFFER_PROFILE_ID, BUFFER_ACCESS_TOKEN)
+    if not board_id:
+        print("❌ لا يمكن إتمام النشر بدون لوحة (Board) محددة.")
+        exit(1)
     
     print("جاري رفع الصورة للحصول على رابط عام سريع...")
     public_image_url = None
@@ -139,42 +169,45 @@ def post_to_buffer(title, description, image_path, affiliate_url):
         
     print(f"✅ تم الرفع بنجاح: {public_image_url}")
 
-    # الرابط الدقيق المعتمد لواجهة GraphQL
-    url = "https://api.buffer.com"
+    url = "https://api.buffer.com/1/graphql"
     full_text = f"{title}\n\n{description}\n\nرابط المشروع والمكونات: {affiliate_url}"
     
-    query = f"""
-    mutation CreatePost($text: String!, $imageUrl: String!) {{
+    # دمج معرف اللوحة في الاستعلام
+    query = """
+    mutation CreatePost($channelId: String!, $pinboardId: String!, $text: String!, $imageUrl: String!) {
       createPost(
-        input: {{
-          channelId: "{BUFFER_PROFILE_ID}"
+        input: {
+          channelId: $channelId
+          pinboardId: $pinboardId
           text: $text
           schedulingType: automatic
           mode: addToQueue
           assets: [
-            {{
-              image: {{
+            {
+              image: {
                 url: $imageUrl
-              }}
-            }}
+              }
+            }
           ]
-        }}
-      ) {{
-        ... on PostActionSuccess {{
-          post {{
+        }
+      ) {
+        ... on PostActionSuccess {
+          post {
             id
-          }}
-        }}
-        ... on MutationError {{
+          }
+        }
+        ... on MutationError {
           message
-        }}
-      }}
-    }}
+        }
+      }
+    }
     """
     
     payload = {
         "query": query,
         "variables": {
+            "channelId": BUFFER_PROFILE_ID,
+            "pinboardId": board_id,
             "text": full_text,
             "imageUrl": public_image_url
         }

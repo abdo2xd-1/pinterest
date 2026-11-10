@@ -4,6 +4,7 @@ import json
 import random
 import time
 import urllib.parse
+import base64
 from google import genai
 
 # 1. استدعاء المفاتيح من إعدادات الأمان في جيت هاب
@@ -77,47 +78,63 @@ def generate_image(image_prompt):
                 with open(image_path, 'wb') as file:
                     file.write(response.content)
                 print("تم تصميم الصورة وحفظها بنجاح عبر Hugging Face.")
-                return image_path
+                return image_path, False # False يعني الصورة ملف على الجهاز
         except Exception:
             pass
         if attempt < max_retries - 1:
             time.sleep(15)
             
     print("فشلت سيرفرات Hugging Face. جاري استخدام السيرفر البديل (Pollinations AI)...")
-    try:
-        encoded_prompt = urllib.parse.quote(final_prompt)
-        fallback_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=768&height=1152&nologo=true"
-        response = requests.get(fallback_url, timeout=60)
-        if response.status_code == 200:
-            image_path = "temp_pin.png"
-            with open(image_path, 'wb') as file:
-                file.write(response.content)
-            print("تم تصميم الصورة بالسيرفر البديل وحفظها بنجاح.")
-            return image_path
-        exit(1)
-    except Exception:
-        exit(1)
+    # الاستغناء عن التحميل والرفع، وتمرير الرابط المباشر لـ Buffer لتفادي أي حظر
+    encoded_prompt = urllib.parse.quote(final_prompt)
+    fallback_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=768&height=1152&nologo=true"
+    print("تم تجهيز رابط الصورة البديل بنجاح.")
+    return fallback_url, True # True يعني الصورة عبارة عن رابط مباشر
 
-def post_to_buffer(title, description, image_path, affiliate_url):
+def post_to_buffer(title, description, image_data, is_url, affiliate_url):
     print("4. جاري النشر إلى بنترست عبر واجهة Buffer GraphQL الجديدة...")
     
-    print("جاري رفع الصورة للحصول على رابط عام...")
     public_image_url = None
     
-    try:
-        with open(image_path, "rb") as f:
-            resp = requests.post("https://telegra.ph/upload", files={"file": ("temp_pin.png", f, "image/png")}, timeout=30)
-            data = resp.json()
-            if isinstance(data, list) and len(data) > 0 and "src" in data[0]:
-                public_image_url = "https://telegra.ph" + data[0]["src"]
-    except Exception as e:
-        print("عطل في سيرفر Telegraph:", str(e))
-            
-    if not public_image_url:
-        print("❌ فشل رفع الصورة. السيرفرات ترفض الطلب.")
-        exit(1)
+    if is_url:
+        public_image_url = image_data
+        print(f"✅ استخدام الرابط المباشر للصورة لتفادي الرفع: {public_image_url}")
+    else:
+        print("جاري رفع الصورة للحصول على رابط عام...")
+        image_path = image_data
         
-    print(f"✅ تم الرفع بنجاح: {public_image_url}")
+        # المحاولة الأولى: سيرفرات Imgur العالمية (لا تحظر جيت هاب)
+        try:
+            headers = {"Authorization": "Client-ID 546c25a59c58ad7"}
+            with open(image_path, "rb") as f:
+                resp = requests.post("https://api.imgur.com/3/image", headers=headers, files={"image": f}, timeout=30)
+                if resp.status_code == 200:
+                    public_image_url = resp.json()["data"]["link"]
+        except Exception:
+            pass
+            
+        # المحاولة الثانية: Freeimage API (مجاني ومستقر)
+        if not public_image_url:
+            try:
+                with open(image_path, "rb") as f:
+                    img_b64 = base64.b64encode(f.read()).decode('utf-8')
+                payload = {
+                    "key": "6d207e02198a847aa98d0a2a901485a5",
+                    "action": "upload",
+                    "source": img_b64,
+                    "format": "json"
+                }
+                resp = requests.post("https://freeimage.host/api/1/upload", data=payload, timeout=30)
+                if resp.status_code == 200:
+                    public_image_url = resp.json()["image"]["url"]
+            except Exception:
+                pass
+                
+        if not public_image_url:
+            print("❌ فشل رفع الصورة. السيرفرات ترفض الطلب.")
+            exit(1)
+            
+        print(f"✅ تم الرفع بنجاح: {public_image_url}")
 
     url = "https://api.buffer.com/1/graphql"
     full_text = f"{title}\n\n{description}\n\nرابط المشروع والمكونات: {affiliate_url}"
@@ -170,7 +187,9 @@ def post_to_buffer(title, description, image_path, affiliate_url):
         data = response.json()
         if "data" in data and data["data"].get("createPost", {}).get("post"):
             print("✅ تمت جدولة الدبوس بنجاح في Buffer!")
-            os.remove(image_path)
+            # مسح الصورة من جيت هاب فقط إذا تم تحميلها
+            if not is_url and os.path.exists(image_data):
+                os.remove(image_data)
         else:
             print("❌ فشل النشر من داخل Buffer:", json.dumps(data, ensure_ascii=False))
             exit(1)
@@ -182,7 +201,7 @@ if __name__ == "__main__":
     try:
         prod_name, aff_link = get_electronic_product()
         title, desc, img_prompt = generate_content(prod_name)
-        img_path = generate_image(img_prompt)
-        post_to_buffer(title, desc, img_path, aff_link)
+        img_data, is_url = generate_image(img_prompt)
+        post_to_buffer(title, desc, img_data, is_url, aff_link)
     except Exception as e:
         print(f"حدث خطأ غير متوقع: {str(e)}")

@@ -89,7 +89,6 @@ def generate_image(image_prompt):
         encoded_prompt = urllib.parse.quote(final_prompt)
         fallback_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=768&height=1152&nologo=true"
         print("جاري تحميل الصورة من السيرفر البديل لضمان سرعة النشر...")
-        # تحميل الصورة لتجنب أي Timeout من سيرفرات Buffer
         response = requests.get(fallback_url, timeout=60)
         if response.status_code == 200:
             image_path = "temp_pin.png"
@@ -109,7 +108,7 @@ def post_to_buffer(title, description, image_path, affiliate_url):
     print("جاري رفع الصورة للحصول على رابط عام سريع...")
     public_image_url = None
     
-    # المحاولة الأولى: Freeimage API (سيرفر مجاني ومستقر جداً)
+    # المحاولة الأولى: Freeimage API
     try:
         with open(image_path, "rb") as f:
             img_b64 = base64.b64encode(f.read()).decode('utf-8')
@@ -142,11 +141,12 @@ def post_to_buffer(title, description, image_path, affiliate_url):
         
     print(f"✅ تم الرفع بنجاح: {public_image_url}")
 
-    url = "https://api.buffer.com/1/graphql"
+    # تم تصحيح الرابط إلى Endpoint الرسمية لـ GraphQL
+    url = "https://api.buffer.com"
     full_text = f"{title}\n\n{description}\n\nرابط المشروع والمكونات: {affiliate_url}"
     
     query = f"""
-    mutation CreatePost($text: String!, $imageUrl: String!) {{
+    mutation CreatePost($text: String!,$imageUrl: String!) {{
       createPost(
         input: {{
           channelId: "{BUFFER_PROFILE_ID}"
@@ -200,15 +200,5 @@ def post_to_buffer(title, description, image_path, affiliate_url):
             print("❌ فشل النشر من داخل Buffer:", json.dumps(data, ensure_ascii=False))
             exit(1)
     else:
-        # إضافة طباعة كود الخطأ لمعرفة السبب بدقة لو حصل أي مشكلة
         print(f"❌ فشل الاتصال بواجهة Buffer (Status Code: {response.status_code}):", response.text)
-        exit(1)
-
-if __name__ == "__main__":
-    try:
-        prod_name, aff_link = get_electronic_product()
-        title, desc, img_prompt = generate_content(prod_name)
-        img_path = generate_image(img_prompt)
-        post_to_buffer(title, desc, img_path, aff_link)
-    except Exception as e:
-        print(f"حدث خطأ غير متوقع: {str(e)}")
+        exit(1

@@ -103,22 +103,47 @@ def generate_image(image_prompt):
         exit(1)
 
 def get_pinterest_board_id(profile_id, token):
-    print("جاري البحث عن لوحة (Board) بنترست في حسابك...")
+    print("جاري البحث عن لوحة (Board) بنترست في حسابك عبر واجهة GraphQL الحديثة...")
+    url = "https://api.buffer.com/1/graphql"
+    query = """
+    query {
+      account {
+        organizations {
+          channels {
+            id
+            service
+            metadata {
+              ... on PinterestMetadata {
+                boards {
+                  serviceId
+                  name
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    """
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     try:
-        url = f"https://api.bufferapp.com/1/profiles/{profile_id}.json"
-        headers = {"Authorization": f"Bearer {token}"}
-        resp = requests.get(url, headers=headers, timeout=30)
+        resp = requests.post(url, headers=headers, json={"query": query}, timeout=30)
         if resp.status_code == 200:
             data = resp.json()
-            subprofiles = data.get("subprofiles", [])
-            if subprofiles:
-                board_id = subprofiles[0].get("id")
-                board_name = subprofiles[0].get("name")
-                print(f"✅ تم العثور على لوحة بنترست: '{board_name}' (ID: {board_id})")
-                return board_id
-            else:
-                print("❌ لم يتم العثور على أي لوحة. يرجى التأكد من إنشاء لوحة (Board) في حساب بنترست الخاص بك وعمل مزامنة في Buffer.")
-                return None
+            orgs = data.get("data", {}).get("account", {}).get("organizations", [])
+            for org in orgs:
+                for channel in org.get("channels", []):
+                    # نبحث عن القناة المطابقة لحسابك
+                    if channel.get("id") == profile_id or channel.get("service") == "pinterest":
+                        metadata = channel.get("metadata", {})
+                        if metadata and "boards" in metadata:
+                            boards = metadata["boards"]
+                            if boards:
+                                board = boards[0]
+                                print(f"✅ تم العثور على لوحة بنترست: '{board.get('name')}'")
+                                return board.get("serviceId")
+            print("❌ لم يتم العثور على أي لوحة بنترست. تأكد من إنشاء لوحة في بنترست وربطها.")
+            return None
         else:
             print(f"❌ فشل جلب بيانات الحساب: {resp.text}")
             return None
@@ -129,10 +154,10 @@ def get_pinterest_board_id(profile_id, token):
 def post_to_buffer(title, description, image_path, affiliate_url):
     print("4. جاري النشر إلى بنترست عبر واجهة Buffer GraphQL...")
     
-    # استخراج اللوحة أوتوماتيكياً
+    # استخراج اللوحة أوتوماتيكياً بواجهة GraphQL
     board_id = get_pinterest_board_id(BUFFER_PROFILE_ID, BUFFER_ACCESS_TOKEN)
     if not board_id:
-        print("❌ لا يمكن إتمام النشر بدون لوحة (Board) محددة.")
+        print("❌ لا يمكن إتمام النشر بدون تحديد لوحة (Board).")
         exit(1)
     
     print("جاري رفع الصورة للحصول على رابط عام سريع...")
@@ -172,16 +197,20 @@ def post_to_buffer(title, description, image_path, affiliate_url):
     url = "https://api.buffer.com/1/graphql"
     full_text = f"{title}\n\n{description}\n\nرابط المشروع والمكونات: {affiliate_url}"
     
-    # دمج معرف اللوحة في الاستعلام
+    # دمج معرف اللوحة في الاستعلام الخاص بـ Pinterest
     query = """
-    mutation CreatePost($channelId: String!, $pinboardId: String!, $text: String!, $imageUrl: String!) {
+    mutation CreatePost($channelId: String!, $boardId: String!, $text: String!, $imageUrl: String!) {
       createPost(
         input: {
           channelId: $channelId
-          pinboardId: $pinboardId
           text: $text
           schedulingType: automatic
           mode: addToQueue
+          metadata: {
+            pinterest: {
+              boardServiceId: $boardId
+            }
+          }
           assets: [
             {
               image: {
@@ -207,7 +236,7 @@ def post_to_buffer(title, description, image_path, affiliate_url):
         "query": query,
         "variables": {
             "channelId": BUFFER_PROFILE_ID,
-            "pinboardId": board_id,
+            "boardId": board_id,
             "text": full_text,
             "imageUrl": public_image_url
         }

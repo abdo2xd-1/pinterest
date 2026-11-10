@@ -51,9 +51,16 @@ def generate_content(product_name):
             return content['title'], content['description'], content['image_prompt']
         except Exception as e:
             print(f"عطل مؤقت في سيرفرات Gemini (المحاولة {attempt + 1}): {str(e)}")
-            if attempt == max_retries - 1:
-                exit(1)
-            time.sleep(10)
+            if attempt < max_retries - 1:
+                time.sleep(15)
+                
+    # الخطة البديلة النهائية (Fallback) في حالة تعطل Gemini تماماً
+    print("فشلت سيرفرات Gemini. جاري استخدام محتوى الطوارئ البديل لضمان استمرار النشر...")
+    fallback_title = f"Awesome DIY Project with {product_name}"
+    fallback_desc = f"Discover how you can build an incredible electronics project using the {product_name}! Perfect for makers, tinkerers, and tech enthusiasts looking to upgrade their DIY skills. Check out the link for the components! 🚀⚡ #DIY #Electronics #Maker #Tech"
+    fallback_image_prompt = f"cyberpunk style electronic workbench focusing on {product_name}, glowing neon LEDs, intricate circuit boards, macro photography, high quality 3D render, highly detailed"
+    
+    return fallback_title, fallback_desc, fallback_image_prompt
 
 def generate_image(image_prompt):
     print("3. جاري تصميم صورة المشروع عبر Hugging Face...")
@@ -97,7 +104,6 @@ def post_to_buffer(title, description, image_path, affiliate_url):
     print("جاري رفع الصورة للحصول على رابط عام...")
     public_image_url = None
     
-    # الاعتماد الكلي على سيرفر Telegraph لتخطي حظر جيت هاب
     try:
         with open(image_path, "rb") as f:
             resp = requests.post("https://telegra.ph/upload", files={"file": ("temp_pin.png", f, "image/png")}, timeout=30)

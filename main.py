@@ -55,7 +55,7 @@ def generate_content(product_name):
             if attempt < max_retries - 1:
                 time.sleep(15)
                 
-    # الخطة البديلة النهائية (Fallback) في حالة تعطل Gemini تماماً
+    # الخطة البديلة النهائية (Fallback) في حالة تعطل Gemini أو انتهاء الباقة
     print("فشلت سيرفرات Gemini. جاري استخدام محتوى الطوارئ البديل لضمان استمرار النشر...")
     fallback_title = f"Awesome DIY Project with {product_name}"
     fallback_desc = f"Discover how you can build an incredible electronics project using the {product_name}! Perfect for makers, tinkerers, and tech enthusiasts looking to upgrade their DIY skills. Check out the link for the components! 🚀⚡ #DIY #Electronics #Maker #Tech"
@@ -141,7 +141,8 @@ def post_to_buffer(title, description, image_path, affiliate_url):
         
     print(f"✅ تم الرفع بنجاح: {public_image_url}")
 
-    url = "https://api.buffer.com/1/graphql"
+    # التصحيح النهائي للرابط بدومين BufferApp الصحيح
+    url = "https://api.bufferapp.com/1/graphql"
     full_text = f"{title}\n\n{description}\n\nرابط المشروع والمكونات: {affiliate_url}"
     
     query = f"""

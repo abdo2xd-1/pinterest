@@ -2,6 +2,7 @@ import os
 import requests
 import json
 import random
+import time
 from google import genai
 
 # 1. استدعاء المفاتيح من إعدادات الأمان في جيت هاب
@@ -38,13 +39,11 @@ def generate_content(product_name):
         "'image_prompt' (وصف تفصيلي بالإنجليزية لصورة 3D لورشة عمل إلكترونيات أو دائرة مضيئة تناسب هذا المشروع لتوليدها بالذكاء الاصطناعي)."
     )
     
-    # استخدام الموديل الأحدث لتوليد المحتوى بناءً على رسالة الخطأ
     response = client.models.generate_content(
         model='gemini-3.8-flash',
         contents=prompt
     )
     
-    # تنظيف النص لضمان استخراج صيغة JSON صحيحة
     cleaned_text = response.text.replace('```json', '').replace('```', '').strip()
     content = json.loads(cleaned_text)
     return content['title'], content['description'], content['image_prompt']
@@ -57,17 +56,30 @@ def generate_image(image_prompt):
     final_prompt = f"{image_prompt}, cyberpunk workbench aesthetic, macro photography of electronic circuit, glowing LEDs, high quality digital 3D render, vertical 2:3 aspect ratio, pinterest aesthetic, NO text, NO watermarks"
     payload = {"inputs": final_prompt}
     
-    response = requests.post(api_url, headers=headers, json=payload)
-    
-    if response.status_code == 200:
-        image_path = "temp_pin.png"
-        with open(image_path, 'wb') as file:
-            file.write(response.content)
-        print("تم تصميم الصورة وحفظها بنجاح.")
-        return image_path
-    else:
-        print("فشل توليد الصورة:", response.text)
-        exit(1)
+    # إضافة نظام المحاولات المتكررة (Retry) لتفادي أخطاء الشبكة المؤقتة
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(api_url, headers=headers, json=payload, timeout=60)
+            
+            if response.status_code == 200:
+                image_path = "temp_pin.png"
+                with open(image_path, 'wb') as file:
+                    file.write(response.content)
+                print("تم تصميم الصورة وحفظها بنجاح.")
+                return image_path
+            else:
+                print(f"فشل توليد الصورة (المحاولة {attempt + 1}):", response.text)
+                if attempt == max_retries - 1:
+                    exit(1)
+        except requests.exceptions.RequestException as e:
+            print(f"عطل مؤقت في الشبكة (المحاولة {attempt + 1}): {str(e)}")
+            if attempt == max_retries - 1:
+                exit(1)
+        
+        # الانتظار 5 ثواني قبل المحاولة اللي بعدها
+        print("الانتظار 5 ثواني قبل إعادة المحاولة...")
+        time.sleep(5)
 
 def post_to_buffer(title, description, image_path, affiliate_url):
     print("4. جاري النشر إلى بنترست عبر Buffer...")

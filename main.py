@@ -61,6 +61,7 @@ def generate_content(product_name):
 
 def generate_image(image_prompt):
     print("3. جاري تصميم صورة المشروع عبر Hugging Face...")
+    # تم التأكد من كتابة الرابط بحروف صغيرة بالكامل لتجنب أخطاء الـ DNS
     api_url = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
     headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"}
     

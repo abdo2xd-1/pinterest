@@ -12,7 +12,7 @@ BUFFER_PROFILE_ID = os.environ.get("BUFFER_PROFILE_ID")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 HUGGINGFACE_API_KEY = os.environ.get("HUGGINGFACE_API_KEY")
 
-# إعداد واجهة Gemini الجديدة مع تحديد إصدار v1beta
+# إعداد واجهة Gemini
 client = genai.Client(api_key=GEMINI_API_KEY, http_options={'api_version': 'v1beta'})
 
 def get_electronic_product():
@@ -24,7 +24,6 @@ def get_electronic_product():
         {"name": "Bluetooth 5.0 Audio Receiver Board", "url": "https://aliexpress.com/"},
         {"name": "ESP32 WiFi Bluetooth Module", "url": "https://aliexpress.com/"}
     ]
-    
     product = random.choice(diy_components)
     print(f"تم اختيار: {product['name']}")
     return product['name'], product['url']
@@ -47,117 +46,121 @@ def generate_content(product_name):
                 model='gemini-3.8-flash',
                 contents=prompt
             )
-            
             cleaned_text = response.text.replace('```json', '').replace('```', '').strip()
             content = json.loads(cleaned_text)
             return content['title'], content['description'], content['image_prompt']
-            
         except Exception as e:
             print(f"عطل مؤقت في سيرفرات Gemini (المحاولة {attempt + 1}): {str(e)}")
             if attempt == max_retries - 1:
-                print("فشلت كل المحاولات للاتصال بـ Gemini. السيرفرات مشغولة جداً.")
                 exit(1)
-            print("الانتظار 10 ثواني قبل إعادة المحاولة...")
             time.sleep(10)
 
 def generate_image(image_prompt):
     print("3. جاري تصميم صورة المشروع عبر Hugging Face...")
     api_url = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
     headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"}
-    
     final_prompt = f"{image_prompt}, cyberpunk workbench aesthetic, macro photography of electronic circuit, glowing LEDs, high quality digital 3D render, vertical 2:3 aspect ratio, pinterest aesthetic, NO text, NO watermarks"
-    payload = {"inputs": final_prompt}
     
     max_retries = 3
     for attempt in range(max_retries):
         try:
-            response = requests.post(api_url, headers=headers, json=payload, timeout=60)
-            
+            response = requests.post(api_url, headers=headers, json={"inputs": final_prompt}, timeout=60)
             if response.status_code == 200:
                 image_path = "temp_pin.png"
                 with open(image_path, 'wb') as file:
                     file.write(response.content)
                 print("تم تصميم الصورة وحفظها بنجاح عبر Hugging Face.")
                 return image_path
-            else:
-                print(f"فشل توليد الصورة من Hugging Face (المحاولة {attempt + 1}):", response.text)
-        except requests.exceptions.RequestException as e:
-            print(f"عطل في الشبكة مع Hugging Face (المحاولة {attempt + 1}): {str(e)}")
-        
+        except Exception:
+            pass
         if attempt < max_retries - 1:
-            print("الانتظار 15 ثانية قبل إعادة المحاولة...")
             time.sleep(15)
             
-    # الخطة البديلة (Fallback) في حالة فشل Hugging Face تماماً
     print("فشلت سيرفرات Hugging Face. جاري استخدام السيرفر البديل (Pollinations AI)...")
     try:
         encoded_prompt = urllib.parse.quote(final_prompt)
         fallback_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=768&height=1152&nologo=true"
         response = requests.get(fallback_url, timeout=60)
-        
         if response.status_code == 200:
             image_path = "temp_pin.png"
             with open(image_path, 'wb') as file:
                 file.write(response.content)
             print("تم تصميم الصورة بالسيرفر البديل وحفظها بنجاح.")
             return image_path
-        else:
-            print("فشل السيرفر البديل أيضاً.")
-            exit(1)
-    except Exception as e:
-        print(f"حدث خطأ في السيرفر البديل: {str(e)}")
+        exit(1)
+    except Exception:
         exit(1)
 
 def post_to_buffer(title, description, image_path, affiliate_url):
     print("4. جاري النشر إلى بنترست عبر واجهة Buffer GraphQL الجديدة...")
     
-    # واجهة GraphQL تتطلب رابط عام للصورة، سنقوم برفعها مؤقتاً
+    # 1. حل مشكلة Invalid uploader برفع الصورة بطريقة احترافية وتوفير سيرفر بديل
     print("جاري رفع الصورة للحصول على رابط عام...")
+    public_image_url = None
+    
+    # المحاولة الأولى (envs.sh) ممتازة مع سيرفرات جيت هاب
     try:
         with open(image_path, "rb") as f:
-            catbox_resp = requests.post("https://catbox.moe/user/api.php", data={"reqtype": "fileupload"}, files={"fileToUpload": f})
-        public_image_url = catbox_resp.text.strip()
-        print(f"تم الرفع بنجاح: {public_image_url}")
-    except Exception as e:
-        print("فشل رفع الصورة:", str(e))
+            resp = requests.post("https://envs.sh", files={"file": ("temp_pin.png", f, "image/png")}, timeout=30)
+            if resp.text.strip().startswith("http"):
+                public_image_url = resp.text.strip()
+    except Exception:
+        pass
+        
+    # المحاولة الثانية (Catbox) مع توفير User-Agent وصيغة ملف صحيحة
+    if not public_image_url:
+        try:
+            with open(image_path, "rb") as f:
+                files = {"fileToUpload": ("temp_pin.png", f, "image/png")}
+                headers = {"User-Agent": "Mozilla/5.0"}
+                resp = requests.post("https://catbox.moe/user/api.php", data={"reqtype": "fileupload"}, files=files, headers=headers, timeout=30)
+                if resp.text.strip().startswith("http"):
+                    public_image_url = resp.text.strip()
+        except Exception:
+            pass
+            
+    if not public_image_url:
+        print("❌ فشل رفع الصورة. السيرفرات ترفض الطلب.")
         exit(1)
+        
+    print(f"✅ تم الرفع بنجاح: {public_image_url}")
 
-    url = "https://api.buffer.com"
+    url = "https://api.buffer.com/1/graphql"
     full_text = f"{title}\n\n{description}\n\nرابط المشروع والمكونات: {affiliate_url}"
     
-    query = """
-    mutation CreatePost($channelId: String!, $text: String!, $imageUrl: String!) {
+    # 2. حل مشكلة ChannelId! بدمج المتغير مباشرة في النص بدلاً من تمريره كمتغير GraphQL
+    query = f"""
+    mutation CreatePost($text: String!, $imageUrl: String!) {{
       createPost(
-        input: {
-          channelId: $channelId
+        input: {{
+          channelId: "{BUFFER_PROFILE_ID}"
           text: $text
           schedulingType: automatic
           mode: addToQueue
           assets: [
-            {
-              image: {
+            {{
+              image: {{
                 url: $imageUrl
-              }
-            }
+              }}
+            }}
           ]
-        }
-      ) {
-        ... on PostActionSuccess {
-          post {
+        }}
+      ) {{
+        ... on PostActionSuccess {{
+          post {{
             id
-          }
-        }
-        ... on MutationError {
+          }}
+        }}
+        ... on MutationError {{
           message
-        }
-      }
-    }
+        }}
+      }}
+    }}
     """
     
     payload = {
         "query": query,
         "variables": {
-            "channelId": BUFFER_PROFILE_ID,
             "text": full_text,
             "imageUrl": public_image_url
         }
@@ -172,7 +175,6 @@ def post_to_buffer(title, description, image_path, affiliate_url):
     
     if response.status_code == 200:
         data = response.json()
-        # التحقق من نجاح عملية GraphQL
         if "data" in data and data["data"].get("createPost", {}).get("post"):
             print("✅ تمت جدولة الدبوس بنجاح في Buffer!")
             os.remove(image_path)

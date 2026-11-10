@@ -94,30 +94,18 @@ def generate_image(image_prompt):
 def post_to_buffer(title, description, image_path, affiliate_url):
     print("4. جاري النشر إلى بنترست عبر واجهة Buffer GraphQL الجديدة...")
     
-    # 1. حل مشكلة Invalid uploader برفع الصورة بطريقة احترافية وتوفير سيرفر بديل
     print("جاري رفع الصورة للحصول على رابط عام...")
     public_image_url = None
     
-    # المحاولة الأولى (envs.sh) ممتازة مع سيرفرات جيت هاب
+    # الاعتماد الكلي على سيرفر Telegraph لتخطي حظر جيت هاب
     try:
         with open(image_path, "rb") as f:
-            resp = requests.post("https://envs.sh", files={"file": ("temp_pin.png", f, "image/png")}, timeout=30)
-            if resp.text.strip().startswith("http"):
-                public_image_url = resp.text.strip()
-    except Exception:
-        pass
-        
-    # المحاولة الثانية (Catbox) مع توفير User-Agent وصيغة ملف صحيحة
-    if not public_image_url:
-        try:
-            with open(image_path, "rb") as f:
-                files = {"fileToUpload": ("temp_pin.png", f, "image/png")}
-                headers = {"User-Agent": "Mozilla/5.0"}
-                resp = requests.post("https://catbox.moe/user/api.php", data={"reqtype": "fileupload"}, files=files, headers=headers, timeout=30)
-                if resp.text.strip().startswith("http"):
-                    public_image_url = resp.text.strip()
-        except Exception:
-            pass
+            resp = requests.post("https://telegra.ph/upload", files={"file": ("temp_pin.png", f, "image/png")}, timeout=30)
+            data = resp.json()
+            if isinstance(data, list) and len(data) > 0 and "src" in data[0]:
+                public_image_url = "https://telegra.ph" + data[0]["src"]
+    except Exception as e:
+        print("عطل في سيرفر Telegraph:", str(e))
             
     if not public_image_url:
         print("❌ فشل رفع الصورة. السيرفرات ترفض الطلب.")
@@ -128,7 +116,6 @@ def post_to_buffer(title, description, image_path, affiliate_url):
     url = "https://api.buffer.com/1/graphql"
     full_text = f"{title}\n\n{description}\n\nرابط المشروع والمكونات: {affiliate_url}"
     
-    # 2. حل مشكلة ChannelId! بدمج المتغير مباشرة في النص بدلاً من تمريره كمتغير GraphQL
     query = f"""
     mutation CreatePost($text: String!, $imageUrl: String!) {{
       createPost(

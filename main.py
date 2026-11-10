@@ -4,7 +4,6 @@ import json
 import random
 import time
 import urllib.parse
-import base64
 from google import genai
 
 # 1. استدعاء المفاتيح من إعدادات الأمان في جيت هاب
@@ -103,104 +102,25 @@ def generate_image(image_prompt):
         exit(1)
 
 def post_to_buffer(title, description, image_path, affiliate_url):
-    print("4. جاري النشر إلى بنترست عبر واجهة Buffer GraphQL الجديدة...")
-    
-    print("جاري رفع الصورة للحصول على رابط عام سريع...")
-    public_image_url = None
-    
-    # المحاولة الأولى: Freeimage API
-    try:
-        with open(image_path, "rb") as f:
-            img_b64 = base64.b64encode(f.read()).decode('utf-8')
-        payload = {
-            "key": "6d207e02198a847aa98d0a2a901485a5",
-            "action": "upload",
-            "source": img_b64,
-            "format": "json"
-        }
-        resp = requests.post("https://freeimage.host/api/1/upload", data=payload, timeout=30)
-        if resp.status_code == 200:
-            public_image_url = resp.json()["image"]["url"]
-    except Exception as e:
-        print("فشل الرفع عبر Freeimage:", str(e))
-        
-    # المحاولة الثانية: Imgur
-    if not public_image_url:
-        try:
-            headers = {"Authorization": "Client-ID 546c25a59c58ad7"}
-            with open(image_path, "rb") as f:
-                resp = requests.post("https://api.imgur.com/3/image", headers=headers, files={"image": f}, timeout=30)
-                if resp.status_code == 200:
-                    public_image_url = resp.json()["data"]["link"]
-        except Exception as e:
-            print("فشل الرفع عبر Imgur:", str(e))
-            
-    if not public_image_url:
-        print("❌ فشل رفع الصورة تماماً.")
-        exit(1)
-        
-    print(f"✅ تم الرفع بنجاح: {public_image_url}")
-
-    # التصحيح النهائي للرابط بدومين BufferApp الصحيح
-    url = "https://api.bufferapp.com/1/graphql"
-    full_text = f"{title}\n\n{description}\n\nرابط المشروع والمكونات: {affiliate_url}"
-    
-    query = f"""
-    mutation CreatePost($text: String!, $imageUrl: String!) {{
-      createPost(
-        input: {{
-          channelId: "{BUFFER_PROFILE_ID}"
-          text: $text
-          schedulingType: automatic
-          mode: addToQueue
-          assets: [
-            {{
-              image: {{
-                url: $imageUrl
-              }}
-            }}
-          ]
-        }}
-      ) {{
-        ... on PostActionSuccess {{
-          post {{
-            id
-          }}
-        }}
-        ... on MutationError {{
-          message
-        }}
-      }}
-    }}
-    """
+    print("4. جاري النشر إلى بنترست عبر واجهة Buffer REST API المباشرة...")
+    url = "https://api.bufferapp.com/1/updates/create.json"
     
     payload = {
-        "query": query,
-        "variables": {
-            "text": full_text,
-            "imageUrl": public_image_url
-        }
+        "profile_ids[]": BUFFER_PROFILE_ID,
+        "text": f"{title}\n\n{description}",
+        "media[link]": affiliate_url
     }
     
-    headers = {
-        "Authorization": f"Bearer {BUFFER_ACCESS_TOKEN}",
-        "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0"
-    }
-    
-    response = requests.post(url, headers=headers, json=payload)
+    with open(image_path, "rb") as f:
+        files = {'media[photo]': ('temp_pin.png', f.read(), 'image/png')}
+        headers = {"Authorization": f"Bearer {BUFFER_ACCESS_TOKEN}"}
+        response = requests.post(url, headers=headers, data=payload, files=files)
     
     if response.status_code == 200:
-        data = response.json()
-        if "data" in data and data["data"].get("createPost", {}).get("post"):
-            print("✅ تمت جدولة الدبوس بنجاح في Buffer!")
-            if os.path.exists(image_path):
-                os.remove(image_path)
-        else:
-            print("❌ فشل النشر من داخل Buffer:", json.dumps(data, ensure_ascii=False))
-            exit(1)
+        print("✅ تمت جدولة الدبوس بنجاح في Buffer!")
+        os.remove(image_path)
     else:
-        print(f"❌ فشل الاتصال بواجهة Buffer (Status Code: {response.status_code}):", response.text)
+        print("❌ فشل النشر:", response.text)
         exit(1)
 
 if __name__ == "__main__":

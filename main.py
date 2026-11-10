@@ -141,12 +141,11 @@ def post_to_buffer(title, description, image_path, affiliate_url):
         
     print(f"✅ تم الرفع بنجاح: {public_image_url}")
 
-    # تم تصحيح الرابط إلى Endpoint الرسمية لـ GraphQL
-    url = "https://api.buffer.com"
+    url = "https://api.buffer.com/1/graphql"
     full_text = f"{title}\n\n{description}\n\nرابط المشروع والمكونات: {affiliate_url}"
     
     query = f"""
-    mutation CreatePost($text: String!,$imageUrl: String!) {{
+    mutation CreatePost($text: String!, $imageUrl: String!) {{
       createPost(
         input: {{
           channelId: "{BUFFER_PROFILE_ID}"
@@ -201,4 +200,13 @@ def post_to_buffer(title, description, image_path, affiliate_url):
             exit(1)
     else:
         print(f"❌ فشل الاتصال بواجهة Buffer (Status Code: {response.status_code}):", response.text)
-        exit(1
+        exit(1)
+
+if __name__ == "__main__":
+    try:
+        prod_name, aff_link = get_electronic_product()
+        title, desc, img_prompt = generate_content(prod_name)
+        img_path = generate_image(img_prompt)
+        post_to_buffer(title, desc, img_path, aff_link)
+    except Exception as e:
+        print(f"حدث خطأ غير متوقع: {str(e)}")

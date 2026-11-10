@@ -39,14 +39,26 @@ def generate_content(product_name):
         "'image_prompt' (وصف تفصيلي بالإنجليزية لصورة 3D لورشة عمل إلكترونيات أو دائرة مضيئة تناسب هذا المشروع لتوليدها بالذكاء الاصطناعي)."
     )
     
-    response = client.models.generate_content(
-        model='gemini-3.8-flash',
-        contents=prompt
-    )
-    
-    cleaned_text = response.text.replace('```json', '').replace('```', '').strip()
-    content = json.loads(cleaned_text)
-    return content['title'], content['description'], content['image_prompt']
+    # إضافة نظام المحاولات المتكررة (Retry) لسيرفرات Gemini
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            response = client.models.generate_content(
+                model='gemini-3.8-flash',
+                contents=prompt
+            )
+            
+            cleaned_text = response.text.replace('```json', '').replace('```', '').strip()
+            content = json.loads(cleaned_text)
+            return content['title'], content['description'], content['image_prompt']
+            
+        except Exception as e:
+            print(f"عطل مؤقت في سيرفرات Gemini (المحاولة {attempt + 1}): {str(e)}")
+            if attempt == max_retries - 1:
+                print("فشلت كل المحاولات للاتصال بـ Gemini. السيرفرات مشغولة جداً.")
+                exit(1)
+            print("الانتظار 10 ثواني قبل إعادة المحاولة...")
+            time.sleep(10)
 
 def generate_image(image_prompt):
     print("3. جاري تصميم صورة المشروع عبر Hugging Face...")
@@ -56,7 +68,7 @@ def generate_image(image_prompt):
     final_prompt = f"{image_prompt}, cyberpunk workbench aesthetic, macro photography of electronic circuit, glowing LEDs, high quality digital 3D render, vertical 2:3 aspect ratio, pinterest aesthetic, NO text, NO watermarks"
     payload = {"inputs": final_prompt}
     
-    # إضافة نظام المحاولات المتكررة (Retry) لتفادي أخطاء الشبكة المؤقتة
+    # نظام المحاولات المتكررة (Retry) لتفادي أخطاء الشبكة
     max_retries = 3
     for attempt in range(max_retries):
         try:
@@ -77,7 +89,6 @@ def generate_image(image_prompt):
             if attempt == max_retries - 1:
                 exit(1)
         
-        # الانتظار 5 ثواني قبل المحاولة اللي بعدها
         print("الانتظار 5 ثواني قبل إعادة المحاولة...")
         time.sleep(5)
 

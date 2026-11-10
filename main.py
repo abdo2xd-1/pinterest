@@ -39,7 +39,6 @@ def generate_content(product_name):
         "'image_prompt' (وصف تفصيلي بالإنجليزية لصورة 3D لورشة عمل إلكترونيات أو دائرة مضيئة تناسب هذا المشروع لتوليدها بالذكاء الاصطناعي)."
     )
     
-    # إضافة نظام المحاولات المتكررة (Retry) لسيرفرات Gemini
     max_retries = 3
     for attempt in range(max_retries):
         try:
@@ -62,13 +61,13 @@ def generate_content(product_name):
 
 def generate_image(image_prompt):
     print("3. جاري تصميم صورة المشروع عبر Hugging Face...")
+    # تم التأكد من كتابة الرابط بحروف صغيرة بالكامل لتجنب أخطاء الـ DNS
     api_url = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
     headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"}
     
     final_prompt = f"{image_prompt}, cyberpunk workbench aesthetic, macro photography of electronic circuit, glowing LEDs, high quality digital 3D render, vertical 2:3 aspect ratio, pinterest aesthetic, NO text, NO watermarks"
     payload = {"inputs": final_prompt}
     
-    # نظام المحاولات المتكررة (Retry) لتفادي أخطاء الشبكة
     max_retries = 3
     for attempt in range(max_retries):
         try:
@@ -87,37 +86,3 @@ def generate_image(image_prompt):
         except requests.exceptions.RequestException as e:
             print(f"عطل مؤقت في الشبكة (المحاولة {attempt + 1}): {str(e)}")
             if attempt == max_retries - 1:
-                exit(1)
-        
-        print("الانتظار 5 ثواني قبل إعادة المحاولة...")
-        time.sleep(5)
-
-def post_to_buffer(title, description, image_path, affiliate_url):
-    print("4. جاري النشر إلى بنترست عبر Buffer...")
-    url = "https://api.bufferapp.com/1/updates/create.json"
-    
-    payload = {
-        "profile_ids[]": BUFFER_PROFILE_ID,
-        "text": f"{title}\n\n{description}",
-        "media[link]": affiliate_url
-    }
-    
-    with open(image_path, "rb") as f:
-        files = {'media[photo]': ('temp_pin.png', f.read(), 'image/png')}
-        headers = {"Authorization": f"Bearer {BUFFER_ACCESS_TOKEN}"}
-        response = requests.post(url, headers=headers, data=payload, files=files)
-    
-    if response.status_code == 200:
-        print("✅ تمت جدولة الدبوس بنجاح في Buffer!")
-        os.remove(image_path)
-    else:
-        print("❌ فشل النشر:", response.text)
-
-if __name__ == "__main__":
-    try:
-        prod_name, aff_link = get_electronic_product()
-        title, desc, img_prompt = generate_content(prod_name)
-        img_path = generate_image(img_prompt)
-        post_to_buffer(title, desc, img_path, aff_link)
-    except Exception as e:
-        print(f"حدث خطأ غير متوقع: {str(e)}")

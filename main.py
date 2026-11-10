@@ -3,6 +3,7 @@ import requests
 import json
 import random
 import time
+import urllib.parse
 from google import genai
 
 # 1. استدعاء المفاتيح من إعدادات الأمان في جيت هاب
@@ -61,7 +62,6 @@ def generate_content(product_name):
 
 def generate_image(image_prompt):
     print("3. جاري تصميم صورة المشروع عبر Hugging Face...")
-    # تم التأكد من كتابة الرابط بحروف صغيرة بالكامل لتجنب أخطاء الـ DNS
     api_url = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
     headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"}
     
@@ -77,19 +77,36 @@ def generate_image(image_prompt):
                 image_path = "temp_pin.png"
                 with open(image_path, 'wb') as file:
                     file.write(response.content)
-                print("تم تصميم الصورة وحفظها بنجاح.")
+                print("تم تصميم الصورة وحفظها بنجاح عبر Hugging Face.")
                 return image_path
             else:
-                print(f"فشل توليد الصورة (المحاولة {attempt + 1}):", response.text)
-                if attempt == max_retries - 1:
-                    exit(1)
+                print(f"فشل توليد الصورة من Hugging Face (المحاولة {attempt + 1}):", response.text)
         except requests.exceptions.RequestException as e:
-            print(f"عطل مؤقت في الشبكة (المحاولة {attempt + 1}): {str(e)}")
-            if attempt == max_retries - 1:
-                exit(1)
+            print(f"عطل في الشبكة مع Hugging Face (المحاولة {attempt + 1}): {str(e)}")
         
-        print("الانتظار 15 ثانية قبل إعادة المحاولة لتجنب ضغط الشبكة...")
-        time.sleep(15)
+        if attempt < max_retries - 1:
+            print("الانتظار 15 ثانية قبل إعادة المحاولة...")
+            time.sleep(15)
+            
+    # الخطة البديلة (Fallback) في حالة فشل Hugging Face تماماً
+    print("فشلت سيرفرات Hugging Face. جاري استخدام السيرفر البديل (Pollinations AI)...")
+    try:
+        encoded_prompt = urllib.parse.quote(final_prompt)
+        fallback_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=768&height=1152&nologo=true"
+        response = requests.get(fallback_url, timeout=60)
+        
+        if response.status_code == 200:
+            image_path = "temp_pin.png"
+            with open(image_path, 'wb') as file:
+                file.write(response.content)
+            print("تم تصميم الصورة بالسيرفر البديل وحفظها بنجاح.")
+            return image_path
+        else:
+            print("فشل السيرفر البديل أيضاً.")
+            exit(1)
+    except Exception as e:
+        print(f"حدث خطأ في السيرفر البديل: {str(e)}")
+        exit(1)
 
 def post_to_buffer(title, description, image_path, affiliate_url):
     print("4. جاري النشر إلى بنترست عبر Buffer...")

@@ -109,25 +109,79 @@ def generate_image(image_prompt):
         exit(1)
 
 def post_to_buffer(title, description, image_path, affiliate_url):
-    print("4. جاري النشر إلى بنترست عبر Buffer...")
-    url = "https://api.bufferapp.com/1/updates/create.json"
+    print("4. جاري النشر إلى بنترست عبر واجهة Buffer GraphQL الجديدة...")
+    
+    # واجهة GraphQL تتطلب رابط عام للصورة، سنقوم برفعها مؤقتاً
+    print("جاري رفع الصورة للحصول على رابط عام...")
+    try:
+        with open(image_path, "rb") as f:
+            catbox_resp = requests.post("https://catbox.moe/user/api.php", data={"reqtype": "fileupload"}, files={"fileToUpload": f})
+        public_image_url = catbox_resp.text.strip()
+        print(f"تم الرفع بنجاح: {public_image_url}")
+    except Exception as e:
+        print("فشل رفع الصورة:", str(e))
+        exit(1)
+
+    url = "https://api.buffer.com"
+    full_text = f"{title}\n\n{description}\n\nرابط المشروع والمكونات: {affiliate_url}"
+    
+    query = """
+    mutation CreatePost($channelId: String!, $text: String!, $imageUrl: String!) {
+      createPost(
+        input: {
+          channelId: $channelId
+          text: $text
+          schedulingType: automatic
+          mode: addToQueue
+          assets: [
+            {
+              image: {
+                url: $imageUrl
+              }
+            }
+          ]
+        }
+      ) {
+        ... on PostActionSuccess {
+          post {
+            id
+          }
+        }
+        ... on MutationError {
+          message
+        }
+      }
+    }
+    """
     
     payload = {
-        "profile_ids[]": BUFFER_PROFILE_ID,
-        "text": f"{title}\n\n{description}",
-        "media[link]": affiliate_url
+        "query": query,
+        "variables": {
+            "channelId": BUFFER_PROFILE_ID,
+            "text": full_text,
+            "imageUrl": public_image_url
+        }
     }
     
-    with open(image_path, "rb") as f:
-        files = {'media[photo]': ('temp_pin.png', f.read(), 'image/png')}
-        headers = {"Authorization": f"Bearer {BUFFER_ACCESS_TOKEN}"}
-        response = requests.post(url, headers=headers, data=payload, files=files)
+    headers = {
+        "Authorization": f"Bearer {BUFFER_ACCESS_TOKEN}",
+        "Content-Type": "application/json"
+    }
+    
+    response = requests.post(url, headers=headers, json=payload)
     
     if response.status_code == 200:
-        print("✅ تمت جدولة الدبوس بنجاح في Buffer!")
-        os.remove(image_path)
+        data = response.json()
+        # التحقق من نجاح عملية GraphQL
+        if "data" in data and data["data"].get("createPost", {}).get("post"):
+            print("✅ تمت جدولة الدبوس بنجاح في Buffer!")
+            os.remove(image_path)
+        else:
+            print("❌ فشل النشر من داخل Buffer:", json.dumps(data, ensure_ascii=False))
+            exit(1)
     else:
-        print("❌ فشل النشر:", response.text)
+        print("❌ فشل الاتصال بواجهة Buffer:", response.text)
+        exit(1)
 
 if __name__ == "__main__":
     try:

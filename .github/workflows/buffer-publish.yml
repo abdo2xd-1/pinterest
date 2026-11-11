@@ -1,0 +1,25 @@
+name: Publish to Pinterest via Buffer
+
+on:
+  workflow_dispatch: 
+
+jobs:
+  post-buffer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install requests
+        run: pip install requests
+
+      - name: Run Buffer Publisher
+        env:
+          BUFFER_ACCESS_TOKEN: ${{ secrets.BUFFER_ACCESS_TOKEN }}
+          BUFFER_PINTEREST_ID: ${{ secrets.BUFFER_PINTEREST_ID }}
+        run: python publish_buffer.py

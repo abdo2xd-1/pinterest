@@ -3,25 +3,48 @@ import requests
 
 def post_to_buffer():
     access_token = os.getenv('BUFFER_ACCESS_TOKEN')
-    profile_id = os.getenv('BUFFER_PINTEREST_ID')
+    channel_id = os.getenv('BUFFER_PINTEREST_ID') # Profile ID هو نفسه Channel ID في GraphQL
     
-    url = "https://api.bufferapp.com/1/updates/create.json"
+    url = "https://api.bufferapp.com/graphql"
     
-    payload = {
-        "access_token": access_token,
-        "profile_ids[]": profile_id,
-        "text": "منشور تلقائي عبر GitHub Actions و Buffer API 🚀",
-        "media[link]": "https://github.com/yourusername/yourrepo", 
-        "media[picture]": "https://example.com/your-image.jpg" 
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
     }
     
-    response = requests.post(url, data=payload)
+    # استعلام GraphQL لإنشاء منشور (Draft) في بافر
+    query = """
+    mutation draftCreate($channelId: String!, $text: String!) {
+        draftCreate(
+            channelId: $channelId, 
+            text: $text
+        ) {
+            draft {
+                id
+                text
+            }
+        }
+    }
+    """
     
-    if response.status_code == 200:
-        print("✅ تم إرسال المنشور إلى طابور بافر بنجاح!")
+    # المتغيرات التي سيتم إرسالها (النص يحتوي على الرابط)
+    variables = {
+        "channelId": channel_id,
+        "text": "منشور تلقائي عبر GitHub Actions و Buffer GraphQL API 🚀\nhttps://github.com/yourusername/yourrepo"
+    }
+    
+    payload = {
+        "query": query,
+        "variables": variables
+    }
+    
+    response = requests.post(url, headers=headers, json=payload)
+    
+    if response.status_code == 200 and "errors" not in response.json():
+        print("✅ تم إرسال المنشور إلى طابور بافر بنجاح عبر GraphQL!")
         print(response.json())
     else:
-        print("❌ فشل النشر:", response.status_code)
+        print("❌ فشل النشر:")
         print(response.text)
         exit(1)
 

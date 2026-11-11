@@ -1,52 +1,28 @@
-import os
-import requests
+name: Publish to Pinterest
 
-def post_to_buffer():
-    access_token = os.getenv('BUFFER_ACCESS_TOKEN')
-    channel_id = os.getenv('BUFFER_PINTEREST_ID') # Profile ID هو نفسه Channel ID في GraphQL
-    
-    url = "https://api.bufferapp.com/graphql"
-    
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json"
-    }
-    
-    # استعلام GraphQL لإنشاء منشور (Draft) في بافر
-    query = """
-    mutation draftCreate($channelId: String!, $text: String!) {
-        draftCreate(
-            channelId: $channelId, 
-            text: $text
-        ) {
-            draft {
-                id
-                text
-            }
-        }
-    }
-    """
-    
-    # المتغيرات التي سيتم إرسالها (النص يحتوي على الرابط)
-    variables = {
-        "channelId": channel_id,
-        "text": "منشور تلقائي عبر GitHub Actions و Buffer GraphQL API 🚀\nhttps://github.com/yourusername/yourrepo"
-    }
-    
-    payload = {
-        "query": query,
-        "variables": variables
-    }
-    
-    response = requests.post(url, headers=headers, json=payload)
-    
-    if response.status_code == 200 and "errors" not in response.json():
-        print("✅ تم إرسال المنشور إلى طابور بافر بنجاح عبر GraphQL!")
-        print(response.json())
-    else:
-        print("❌ فشل النشر:")
-        print(response.text)
-        exit(1)
+on:
+  workflow_dispatch: # يتيح لك تشغيل الكود يدوياً من واجهة جيت هاب
 
-if __name__ == "__main__":
-    post_to_buffer()
+jobs:
+  post-pin:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Run Pinterest Publisher
+        env:
+          # ربط الأسرار من إعدادات المستودع
+          PINTEREST_ACCESS_TOKEN: ${{ secrets.PINTEREST_ACCESS_TOKEN }}
+          PINTEREST_BOARD_ID: ${{ secrets.PINTEREST_BOARD_ID }}
+        run: python publish_pin.py

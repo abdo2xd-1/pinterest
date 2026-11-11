@@ -1,10 +1,10 @@
-name: Publish to Pinterest via Buffer
+name: Publish to Pinterest
 
 on:
-  workflow_dispatch: 
+  workflow_dispatch: # يتيح لك تشغيل الكود يدوياً من واجهة جيت هاب
 
 jobs:
-  post-buffer:
+  post-pin:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -15,11 +15,13 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install requests
-        run: pip install requests
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
 
-      - name: Run Buffer Publisher
+      - name: Run Pinterest Publisher
         env:
-          BUFFER_ACCESS_TOKEN: ${{ secrets.BUFFER_ACCESS_TOKEN }}
-          BUFFER_PINTEREST_ID: ${{ secrets.BUFFER_PINTEREST_ID }}
-        run: python publish_buffer.py
+          PINTEREST_ACCESS_TOKEN: ${{ secrets.PINTEREST_ACCESS_TOKEN }}
+          PINTEREST_BOARD_ID: ${{ secrets.PINTEREST_BOARD_ID }}
+        run: python publish_pin.py
